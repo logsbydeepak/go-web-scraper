@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 
@@ -27,7 +28,13 @@ var rootCmd = &cobra.Command{
 			fmt.Println(err)
 			return
 		}
-		fmt.Println(res)
+
+		body, err := io.ReadAll(res.Body)
+		if err != nil {
+			return
+		}
+		bodyString := string(body)
+		fmt.Println("Response Body:", bodyString)
 	},
 }
 
