@@ -3,10 +3,12 @@ package cmd
 import (
 	"fmt"
 	"io"
+	// "io"
 	"net/http"
 	"os"
 
 	"github.com/spf13/cobra"
+	"golang.org/x/net/html"
 )
 
 var rootCmd = &cobra.Command{
@@ -29,12 +31,33 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			return
+		t := html.NewTokenizer(res.Body)
+
+		for {
+			tt := t.Next()
+			if tt == html.ErrorToken {
+				if t.Err() == io.EOF {
+					break
+				} else {
+					fmt.Println(t.Err())
+					break
+				}
+			}
+
+			tag, hasAttr := t.TagName()
+			if string(tag) == "a" && hasAttr {
+				for {
+					attrKey, attrValue, moreAttr := t.TagAttr()
+					if string(attrKey) == "href" {
+						fmt.Println(string(attrKey), string(attrValue))
+					}
+					if !moreAttr {
+						break
+					}
+				}
+			}
+
 		}
-		bodyString := string(body)
-		fmt.Println("Response Body:", bodyString)
 	},
 }
 
