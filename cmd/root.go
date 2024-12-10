@@ -19,46 +19,62 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
+		var urls []string
+
 		url := args[0]
 		if len(url) == 0 {
 			return
 		}
+		urls = append(urls, args[0])
+
 		fmt.Printf("Scanning: %s\n", args[0])
 
-		res, err := http.Get(args[0])
-		if err != nil {
-			fmt.Println(err)
-			return
-		}
-
-		t := html.NewTokenizer(res.Body)
-
-		for {
-			tt := t.Next()
-			if tt == html.ErrorToken {
-				if t.Err() == io.EOF {
-					break
-				} else {
-					fmt.Println(t.Err())
-					break
-				}
+		for _, url := range urls {
+			res, err := getHtml(url)
+			if err != nil {
+				fmt.Println(err)
+				return
 			}
 
-			tag, hasAttr := t.TagName()
-			if string(tag) == "a" && hasAttr {
-				for {
-					attrKey, attrValue, moreAttr := t.TagAttr()
-					if string(attrKey) == "href" {
-						fmt.Println(string(attrKey), string(attrValue))
-					}
-					if !moreAttr {
-						break
-					}
-				}
-			}
-
+			tokenizer := html.NewTokenizer(res.Body)
+			newUrls := hrefs(tokenizer)
+			urls = append(urls, newUrls...)
 		}
+		fmt.Println(urls)
 	},
+}
+
+func getHtml(url string) (*http.Response, error) {
+	return http.Get(url)
+}
+
+func hrefs(tokenizer *html.Tokenizer) (urls []string) {
+	for {
+		tt := tokenizer.Next()
+		if tt == html.ErrorToken {
+			if tokenizer.Err() == io.EOF {
+				break
+			} else {
+				fmt.Println(tokenizer.Err())
+				break
+			}
+		}
+
+		tag, hasAttr := tokenizer.TagName()
+		if string(tag) == "a" && hasAttr {
+			for {
+				attrKey, attrValue, moreAttr := tokenizer.TagAttr()
+				if string(attrKey) == "href" {
+					urls = append(urls, string(attrValue))
+				}
+				if !moreAttr {
+					break
+				}
+			}
+		}
+	}
+
+	return urls
 }
 
 func Execute() {
