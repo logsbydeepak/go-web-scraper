@@ -3,7 +3,8 @@ package cmd
 import (
 	"fmt"
 	"io"
-	// "io"
+	"net/url"
+
 	"net/http"
 	"os"
 
@@ -20,17 +21,43 @@ var rootCmd = &cobra.Command{
 		}
 
 		var urls []string
-
-		url := args[0]
-		if len(url) == 0 {
+		if len(args[0]) == 0 {
 			return
 		}
 		urls = append(urls, args[0])
+		visited := make(map[string]struct{})
 
-		fmt.Printf("Scanning: %s\n", args[0])
+		for {
+			var err error
+			if len(urls) == 0 {
+				break
+			}
 
-		for _, url := range urls {
-			res, err := getHtml(url)
+			currentUrl := urls[0]
+
+			if currentUrl != args[0] {
+				if currentUrl[0] != '/' {
+					fmt.Printf("Out of scope: %s\n", currentUrl)
+					urls = urls[1:]
+					continue
+				} else {
+					currentUrl, err = url.JoinPath(args[0], currentUrl)
+					if err != nil {
+						fmt.Println(err)
+						return
+					}
+				}
+			}
+
+			_, ok := visited[currentUrl]
+			if ok {
+				fmt.Printf("Already visited: %s\n", currentUrl)
+				urls = urls[1:]
+				continue
+			}
+
+			fmt.Printf("Scanning: %s\n", currentUrl)
+			res, err := getHtml(currentUrl)
 			if err != nil {
 				fmt.Println(err)
 				return
@@ -39,8 +66,11 @@ var rootCmd = &cobra.Command{
 			tokenizer := html.NewTokenizer(res.Body)
 			newUrls := hrefs(tokenizer)
 			urls = append(urls, newUrls...)
+			fmt.Println(urls)
+			visited[currentUrl] = struct{}{}
+			urls = urls[1:]
 		}
-		fmt.Println(urls)
+
 	},
 }
 
