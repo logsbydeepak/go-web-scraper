@@ -12,6 +12,11 @@ import (
 	"golang.org/x/net/html"
 )
 
+type Result struct {
+	url    string
+	status int
+}
+
 var rootCmd = &cobra.Command{
 	Use:   "Web scraper",
 	Short: "Find dead link",
@@ -26,6 +31,7 @@ var rootCmd = &cobra.Command{
 		}
 		urls = append(urls, args[0])
 		visited := make(map[string]struct{})
+		var results []Result
 
 		for {
 			var err error
@@ -63,14 +69,21 @@ var rootCmd = &cobra.Command{
 				return
 			}
 
-			tokenizer := html.NewTokenizer(res.Body)
-			newUrls := hrefs(tokenizer)
-			urls = append(urls, newUrls...)
-			fmt.Println(urls)
+			fmt.Println(res.Status)
+			results = append(results, Result{url: currentUrl, status: res.StatusCode})
+			if res.StatusCode == http.StatusOK {
+				tokenizer := html.NewTokenizer(res.Body)
+				newUrls := hrefs(tokenizer)
+				urls = append(urls, newUrls...)
+			}
 			visited[currentUrl] = struct{}{}
 			urls = urls[1:]
 		}
 
+		fmt.Println("\nResults:")
+		for _, result := range results {
+			fmt.Printf("%d <- %s\n", result.status, result.url)
+		}
 	},
 }
 
