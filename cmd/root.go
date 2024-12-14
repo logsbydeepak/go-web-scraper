@@ -40,50 +40,7 @@ var rootCmd = &cobra.Command{
 
 		go func() {
 			for myurl := range fetchUrl {
-				go func() {
-					wg.Add(1)
-					defer wg.Done()
-					var err error
-					currentUrl := myurl
-
-					if currentUrl != args[0] {
-						if currentUrl[0] != '/' {
-							fmt.Printf("Out of scope: %s\n", currentUrl)
-							return
-						} else {
-							currentUrl, err = url.JoinPath(args[0], currentUrl)
-							if err != nil {
-								fmt.Println(err)
-								return
-							}
-						}
-					}
-
-					_, ok := visited[currentUrl]
-					if ok {
-						fmt.Printf("Already visited: %s\n", currentUrl)
-						return
-					}
-
-					fmt.Printf("Scanning: %s\n", currentUrl)
-					res, err := getHtml(currentUrl)
-					if err != nil {
-						fmt.Println(err)
-						return
-					}
-					visited[currentUrl] = struct{}{}
-
-					fmt.Println(res.Status)
-					results = append(results, Result{url: currentUrl, status: res.StatusCode})
-					if res.StatusCode == http.StatusOK {
-						tokenizer := html.NewTokenizer(res.Body)
-						newUrls := hrefs(tokenizer)
-						for _, each := range newUrls {
-							fetchUrl <- each
-						}
-
-					}
-				}()
+				go getResult(myurl, &visited, args[0], &results, fetchUrl)
 			}
 		}()
 		fetchUrl <- args[0]
@@ -96,6 +53,50 @@ var rootCmd = &cobra.Command{
 			fmt.Printf("%d <- %s\n", result.status, result.url)
 		}
 	},
+}
+
+func getResult(currentUrl string, visited *map[string]struct{}, originalUrl string, results *[]Result, fetchUrl chan<- string) {
+	wg.Add(1)
+	defer wg.Done()
+	var err error
+	if currentUrl != originalUrl {
+		if currentUrl[0] != '/' {
+			fmt.Printf("Out of scope: %s\n", currentUrl)
+			return
+		} else {
+			currentUrl, err = url.JoinPath(originalUrl, currentUrl)
+			if err != nil {
+				fmt.Println(err)
+				return
+			}
+		}
+	}
+
+	_, ok := (*visited)[currentUrl]
+	if ok {
+		fmt.Printf("Already visited: %s\n", currentUrl)
+		return
+	}
+
+	fmt.Printf("Scanning: %s\n", currentUrl)
+	res, err := getHtml(currentUrl)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+	mut.Lock()
+	(*visited)[currentUrl] = struct{}{}
+	mut.Unlock()
+
+	fmt.Println(res.Status)
+	*results = append(*results, Result{url: currentUrl, status: res.StatusCode})
+	if res.StatusCode == http.StatusOK {
+		tokenizer := html.NewTokenizer(res.Body)
+		newUrls := hrefs(tokenizer)
+		for _, each := range newUrls {
+			fetchUrl <- each
+		}
+	}
 }
 
 func getHtml(url string) (*http.Response, error) {
