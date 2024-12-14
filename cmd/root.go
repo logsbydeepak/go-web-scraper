@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"sync"
 
 	"net/http"
 	"os"
@@ -17,6 +18,9 @@ type Result struct {
 	status int
 }
 
+var wg sync.WaitGroup
+var mut sync.Mutex
+
 var rootCmd = &cobra.Command{
 	Use:   "Web scraper",
 	Short: "Find dead link",
@@ -25,60 +29,67 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		var urls []string
 		if len(args[0]) == 0 {
 			return
 		}
-		urls = append(urls, args[0])
+
 		visited := make(map[string]struct{})
 		var results []Result
 
-		for {
-			var err error
-			if len(urls) == 0 {
-				break
-			}
+		fetchUrl := make(chan string)
 
-			currentUrl := urls[0]
+		go func() {
+			for myurl := range fetchUrl {
+				go func() {
+					wg.Add(1)
+					defer wg.Done()
+					var err error
+					currentUrl := myurl
 
-			if currentUrl != args[0] {
-				if currentUrl[0] != '/' {
-					fmt.Printf("Out of scope: %s\n", currentUrl)
-					urls = urls[1:]
-					continue
-				} else {
-					currentUrl, err = url.JoinPath(args[0], currentUrl)
+					if currentUrl != args[0] {
+						if currentUrl[0] != '/' {
+							fmt.Printf("Out of scope: %s\n", currentUrl)
+							return
+						} else {
+							currentUrl, err = url.JoinPath(args[0], currentUrl)
+							if err != nil {
+								fmt.Println(err)
+								return
+							}
+						}
+					}
+
+					_, ok := visited[currentUrl]
+					if ok {
+						fmt.Printf("Already visited: %s\n", currentUrl)
+						return
+					}
+
+					fmt.Printf("Scanning: %s\n", currentUrl)
+					res, err := getHtml(currentUrl)
 					if err != nil {
 						fmt.Println(err)
 						return
 					}
-				}
-			}
+					visited[currentUrl] = struct{}{}
 
-			_, ok := visited[currentUrl]
-			if ok {
-				fmt.Printf("Already visited: %s\n", currentUrl)
-				urls = urls[1:]
-				continue
-			}
+					fmt.Println(res.Status)
+					results = append(results, Result{url: currentUrl, status: res.StatusCode})
+					if res.StatusCode == http.StatusOK {
+						tokenizer := html.NewTokenizer(res.Body)
+						newUrls := hrefs(tokenizer)
+						for _, each := range newUrls {
+							fetchUrl <- each
+						}
 
-			fmt.Printf("Scanning: %s\n", currentUrl)
-			res, err := getHtml(currentUrl)
-			if err != nil {
-				fmt.Println(err)
-				return
+					}
+				}()
 			}
+		}()
+		fetchUrl <- args[0]
 
-			fmt.Println(res.Status)
-			results = append(results, Result{url: currentUrl, status: res.StatusCode})
-			if res.StatusCode == http.StatusOK {
-				tokenizer := html.NewTokenizer(res.Body)
-				newUrls := hrefs(tokenizer)
-				urls = append(urls, newUrls...)
-			}
-			visited[currentUrl] = struct{}{}
-			urls = urls[1:]
-		}
+		wg.Wait()
+		close(fetchUrl)
 
 		fmt.Println("\nResults:")
 		for _, result := range results {
