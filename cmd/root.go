@@ -38,11 +38,13 @@ var rootCmd = &cobra.Command{
 
 		fetchUrl := make(chan string)
 
-		go func() {
+		fetch := func() {
 			for myurl := range fetchUrl {
 				go getResult(myurl, &visited, args[0], &results, fetchUrl)
 			}
-		}()
+		}
+		go fetch()
+
 		fetchUrl <- args[0]
 
 		wg.Wait()
@@ -58,6 +60,7 @@ var rootCmd = &cobra.Command{
 func getResult(currentUrl string, visited *map[string]struct{}, originalUrl string, results *[]Result, fetchUrl chan<- string) {
 	wg.Add(1)
 	defer wg.Done()
+
 	var err error
 	if currentUrl != originalUrl {
 		if currentUrl[0] != '/' {
@@ -79,7 +82,7 @@ func getResult(currentUrl string, visited *map[string]struct{}, originalUrl stri
 	}
 
 	fmt.Printf("Scanning: %s\n", currentUrl)
-	res, err := getHtml(currentUrl)
+	res, err := http.Get(currentUrl)
 	if err != nil {
 		fmt.Println(err)
 		return
@@ -97,10 +100,6 @@ func getResult(currentUrl string, visited *map[string]struct{}, originalUrl stri
 			fetchUrl <- each
 		}
 	}
-}
-
-func getHtml(url string) (*http.Response, error) {
-	return http.Get(url)
 }
 
 func hrefs(tokenizer *html.Tokenizer) (urls []string) {
