@@ -35,8 +35,8 @@ var rootCmd = &cobra.Command{
 
 		var (
 			visited     = make(map[string]struct{})
-			results     = []Result{}
 			fetchUrl    = make(chan string)
+			results     = []Result{}
 			originalUrl = args[0]
 		)
 
@@ -56,12 +56,16 @@ var rootCmd = &cobra.Command{
 					}
 				}
 
+				mut.Lock()
 				if _, ok := visited[currentUrl]; ok {
+					mut.Unlock()
 					fmt.Printf("Already visited: %s\n", currentUrl)
 					continue
 				}
+				visited[currentUrl] = struct{}{}
+				mut.Unlock()
 
-				go getResult(currentUrl, &visited, &results, fetchUrl)
+				go getResult(currentUrl, &results, fetchUrl)
 			}
 		}
 		go fetch()
@@ -78,7 +82,7 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func getResult(currentUrl string, visited *map[string]struct{}, results *[]Result, fetchUrl chan<- string) {
+func getResult(currentUrl string, results *[]Result, fetchUrl chan<- string) {
 	wg.Add(1)
 	defer wg.Done()
 
@@ -90,7 +94,6 @@ func getResult(currentUrl string, visited *map[string]struct{}, results *[]Resul
 	}
 
 	mut.Lock()
-	(*visited)[currentUrl] = struct{}{}
 	*results = append(*results, Result{url: currentUrl, status: res.StatusCode})
 	mut.Unlock()
 
