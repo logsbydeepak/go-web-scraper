@@ -33,19 +33,40 @@ var rootCmd = &cobra.Command{
 			return
 		}
 
-		visited := make(map[string]struct{})
-		var results []Result
-
-		fetchUrl := make(chan string)
+		var (
+			visited     = make(map[string]struct{})
+			results     = []Result{}
+			fetchUrl    = make(chan string)
+			originalUrl = args[0]
+		)
 
 		fetch := func() {
-			for myurl := range fetchUrl {
-				go getResult(myurl, &visited, args[0], &results, fetchUrl)
+			for currentUrl := range fetchUrl {
+				var err error
+				if currentUrl != originalUrl {
+					if currentUrl[0] != '/' {
+						fmt.Printf("Out of scope: %s\n", currentUrl)
+						continue
+					}
+
+					currentUrl, err = url.JoinPath(originalUrl, currentUrl)
+					if err != nil {
+						fmt.Println(err)
+						continue
+					}
+				}
+
+				if _, ok := visited[currentUrl]; ok {
+					fmt.Printf("Already visited: %s\n", currentUrl)
+					continue
+				}
+
+				go getResult(currentUrl, &visited, &results, fetchUrl)
 			}
 		}
 		go fetch()
 
-		fetchUrl <- args[0]
+		fetchUrl <- originalUrl
 
 		wg.Wait()
 		close(fetchUrl)
@@ -57,29 +78,9 @@ var rootCmd = &cobra.Command{
 	},
 }
 
-func getResult(currentUrl string, visited *map[string]struct{}, originalUrl string, results *[]Result, fetchUrl chan<- string) {
+func getResult(currentUrl string, visited *map[string]struct{}, results *[]Result, fetchUrl chan<- string) {
 	wg.Add(1)
 	defer wg.Done()
-
-	var err error
-	if currentUrl != originalUrl {
-		if currentUrl[0] != '/' {
-			fmt.Printf("Out of scope: %s\n", currentUrl)
-			return
-		} else {
-			currentUrl, err = url.JoinPath(originalUrl, currentUrl)
-			if err != nil {
-				fmt.Println(err)
-				return
-			}
-		}
-	}
-
-	_, ok := (*visited)[currentUrl]
-	if ok {
-		fmt.Printf("Already visited: %s\n", currentUrl)
-		return
-	}
 
 	fmt.Printf("Scanning: %s\n", currentUrl)
 	res, err := http.Get(currentUrl)
@@ -87,18 +88,20 @@ func getResult(currentUrl string, visited *map[string]struct{}, originalUrl stri
 		fmt.Println(err)
 		return
 	}
+
 	mut.Lock()
 	(*visited)[currentUrl] = struct{}{}
+	*results = append(*results, Result{url: currentUrl, status: res.StatusCode})
 	mut.Unlock()
 
-	fmt.Println(res.Status)
-	*results = append(*results, Result{url: currentUrl, status: res.StatusCode})
-	if res.StatusCode == http.StatusOK {
-		tokenizer := html.NewTokenizer(res.Body)
-		newUrls := hrefs(tokenizer)
-		for _, each := range newUrls {
-			fetchUrl <- each
-		}
+	if res.StatusCode != http.StatusOK {
+		return
+	}
+
+	tokenizer := html.NewTokenizer(res.Body)
+	newUrls := hrefs(tokenizer)
+	for _, each := range newUrls {
+		fetchUrl <- each
 	}
 }
 
