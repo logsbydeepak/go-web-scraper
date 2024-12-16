@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 
+	"example.com/pkg/output"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/html"
 )
@@ -89,7 +90,7 @@ func getResult(currentUrl string, results *[]Result, fetchUrl chan<- string) {
 	fmt.Printf("Scanning: %s\n", currentUrl)
 	res, err := http.Get(currentUrl)
 	if err != nil {
-		fmt.Println(err)
+		output.Error("Failed to get fetch")
 		return
 	}
 
@@ -115,7 +116,7 @@ func hrefs(tokenizer *html.Tokenizer) (urls []string) {
 			if tokenizer.Err() == io.EOF {
 				break
 			} else {
-				fmt.Println(tokenizer.Err())
+				output.Error("Failed process token")
 				break
 			}
 		}
