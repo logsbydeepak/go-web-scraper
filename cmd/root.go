@@ -103,13 +103,13 @@ func getResult(currentUrl string, results *[]Result, fetchUrl chan<- string) {
 	}
 
 	tokenizer := html.NewTokenizer(res.Body)
-	newUrls := hrefs(tokenizer)
+	newUrls := getAllHrefUrl(tokenizer)
 	for _, each := range newUrls {
 		fetchUrl <- each
 	}
 }
 
-func hrefs(tokenizer *html.Tokenizer) (urls []string) {
+func getAllHrefUrl(tokenizer *html.Tokenizer) (urls []string) {
 	for {
 		tt := tokenizer.Next()
 		if tt == html.ErrorToken {
@@ -122,15 +122,16 @@ func hrefs(tokenizer *html.Tokenizer) (urls []string) {
 		}
 
 		tag, hasAttr := tokenizer.TagName()
-		if string(tag) == "a" && hasAttr {
-			for {
-				attrKey, attrValue, moreAttr := tokenizer.TagAttr()
-				if string(attrKey) == "href" {
-					urls = append(urls, string(attrValue))
-				}
-				if !moreAttr {
-					break
-				}
+		if !(string(tag) == "a") && !hasAttr {
+			continue
+		}
+		for {
+			attrKey, attrValue, moreAttr := tokenizer.TagAttr()
+			if string(attrKey) == "href" {
+				urls = append(urls, string(attrValue))
+			}
+			if !moreAttr {
+				break
 			}
 		}
 	}
