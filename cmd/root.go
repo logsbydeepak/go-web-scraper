@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"net/url"
 	"sync"
 
@@ -10,6 +9,7 @@ import (
 	"os"
 
 	"example.com/pkg/output"
+	"example.com/pkg/scraper"
 	"github.com/spf13/cobra"
 	"golang.org/x/net/html"
 )
@@ -103,40 +103,10 @@ func getResult(currentUrl string, results *[]Result, fetchUrl chan<- string) {
 	}
 
 	tokenizer := html.NewTokenizer(res.Body)
-	newUrls := getAllHrefUrl(tokenizer)
+	newUrls := scraper.GetAllHrefUrl(tokenizer)
 	for _, each := range newUrls {
 		fetchUrl <- each
 	}
-}
-
-func getAllHrefUrl(tokenizer *html.Tokenizer) (urls []string) {
-	for {
-		tt := tokenizer.Next()
-		if tt == html.ErrorToken {
-			if tokenizer.Err() == io.EOF {
-				break
-			} else {
-				output.Error("Failed process token")
-				break
-			}
-		}
-
-		tag, hasAttr := tokenizer.TagName()
-		if !(string(tag) == "a") && !hasAttr {
-			continue
-		}
-		for {
-			attrKey, attrValue, moreAttr := tokenizer.TagAttr()
-			if string(attrKey) == "href" {
-				urls = append(urls, string(attrValue))
-			}
-			if !moreAttr {
-				break
-			}
-		}
-	}
-
-	return urls
 }
 
 func Execute() {
